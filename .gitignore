@@ -1,0 +1,14 @@
+*png
+*pickle
+*json
+*csv
+.spyproject*
+.idea*
+.ipynb*
+*__pycache__
+*pyc
+.vscode*
+preprocessing/data*
+notebooks/catboost_info*
+model*
+.env

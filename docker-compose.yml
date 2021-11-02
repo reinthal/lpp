@@ -1,0 +1,68 @@
+version: '3.1'
+
+services:
+  
+  api:
+    build: &img ./lpp/
+    working_dir: /usr/src/app
+    command: uvicorn api.main:api --reload --workers 1 --host 0.0.0.0 --port ${API_PORT}
+    depends_on:
+      - mongo
+    environment: &env
+      BROKER_URI: 'amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbit:${RABBITMQ_PORT}/'
+      BACKEND_URI: 'redis://redis:6379/0' 
+      API_URL: http://api:${API_PORT}
+      HTTPS_PROXY: ${HTTPS_PROXY}
+      HTTP_PROXY: ${HTTP_PROXY}
+      NO_PROXY: ${NO_PROXY}
+      MONGO_PORT: ${MONGO_PORT}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_DBNAME: ${MONGO_DBNAME}
+      MONGO_HOST: ${MONGO_HOST}
+      MONGO_TICKETS_NAME: ${MONGO_TICKETS_NAME}
+      MONGO_ALERTS_NAME: ${MONGO_ALERTS_NAME}
+      MONGO_DOMAINS_NAME: ${MONGO_DOMAINS_NAME}
+      MONGO_INCIDENTS_NAME: ${MONGO_INCIDENTS_NAME}
+      MONGO_DOMAINS_REAL_TIME_NAME: ${MONGO_DOMAINS_REAL_TIME_NAME}
+      SNOW_API_URL: https://snow-api-url.com/api
+      SNOW_API_USER: user
+      SNOW_API_PASS: password
+      SPLUNK_API_USER: user
+      SPLUNK_API_PASS: password
+      VT_API_KEY: blarg
+  worker:
+    build: *img
+    working_dir: /usr/src/app
+    depends_on:
+      - mongo
+      - rabbit
+    command:  celery -A predict.worker worker -l info --pool=gevent --concurrency=20
+    environment: *env
+  rabbit:
+    image: rabbitmq:3-management
+    restart: always
+    ports:
+      - ${RABBITMQ_PORT}:${RABBITMQ_PORT}
+      - 15672:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+  redis:
+    image: redis
+    restart: always
+  mongo:
+    image: mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+  frontend:
+    depends_on:
+    - mongo
+    build: ./frontend/
+    working_dir: /usr/src/app/
+    command: "streamlit run app.py"
+    ports:
+      - "8501:8501"
+    environment: *env

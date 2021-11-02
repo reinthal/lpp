@@ -1,0 +1,14 @@
+pymongo
+streamlit
+matplotlib
+seaborn
+plotly
+requests
+ipywidgets
+numpy
+tldextract
+sklearn
+llvmlite
+shap
+geoip2
+pycountry

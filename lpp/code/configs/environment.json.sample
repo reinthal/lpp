@@ -1,0 +1,27 @@
+{
+    "db": {
+        "host": "127.0.0.1",
+        "db_name": "lookerplusplus",
+        "port": "27017"
+    },
+    "api_keys": {
+        "vt": "< insert api key here>",
+        "snow": {
+            "query_parameters": {
+                "tde_assignment_group": "< more secrets >",
+                "contact_type": "< hello password >",
+                "u_created_by_name": "< nope >"
+            },
+            "prod": {
+                "url": "https://service-nowurl.com",
+                "user": "user",
+                "password": ""
+            }        
+        },
+        "splunk": {
+            "user": "username",
+            "password": "passwordddddsz"
+            
+        }
+    }
+}
