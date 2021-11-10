@@ -28,7 +28,7 @@ services:
       SNOW_API_PASS: password
       SPLUNK_API_USER: user
       SPLUNK_API_PASS: password
-      VT_API_KEY: blarg
+      VT_API_KEY: ${VT_API}
       SNOW_FETCH_UDPATE_PERIOD: 300
   scheduler:
     build: *img
