@@ -9,12 +9,10 @@ services:
     depends_on:
       - mongo
     environment: &env
+      KARTE_URL: ${KARTE_URL}
       BROKER_URI: 'amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbit:${RABBITMQ_PORT}/'
       BACKEND_URI: 'redis://redis:6379/0' 
       API_URL: http://api:${API_PORT}
-      HTTPS_PROXY: ${HTTPS_PROXY}
-      HTTP_PROXY: ${HTTP_PROXY}
-      NO_PROXY: ${NO_PROXY}
       MONGO_PORT: ${MONGO_PORT}
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
@@ -31,13 +29,23 @@ services:
       SPLUNK_API_USER: user
       SPLUNK_API_PASS: password
       VT_API_KEY: blarg
+      SNOW_FETCH_UDPATE_PERIOD: 300
+  scheduler:
+    build: *img
+    environment: *env
+    working_dir: /usr/src/app
+    depends_on: 
+      - mongo
+      - rabbit
+      - redis
+    command: celery -A workers.scheduler beat -l info
   worker:
     build: *img
     working_dir: /usr/src/app
     depends_on:
       - mongo
       - rabbit
-    command:  celery -A predict.worker worker -l info --pool=gevent --concurrency=20
+    command:  celery -A workers.worker worker -l info --pool=gevent --concurrency=20
     environment: *env
   rabbit:
     image: rabbitmq:3-management
@@ -52,17 +60,25 @@ services:
     image: redis
     restart: always
   mongo:
-    image: mongo
+    image: mongo:4.4.4
     restart: always
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
   frontend:
     depends_on:
-    - mongo
+    - api
     build: ./frontend/
     working_dir: /usr/src/app/
-    command: "streamlit run app.py"
-    ports:
-      - "8501:8501"
     environment: *env
+    command: gunicorn index:server -b :8050
+  em:
+    build: ./em/
+    working_dir: /build/lpp
+    command: "python module.py -C -v"
+    environment: 
+      API_URL: http://api:${API_PORT}
+      FRONTEND_URL: http://frontend:${FRONTEND_PORT}/
+      HTTPS_PROXY: ""
+      HTTP_PROXY: ""
+      NO_PROXY: ""

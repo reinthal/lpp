@@ -1,6 +1,9 @@
 version: '3.1'
 
 services:
+  scheduler:
+    volumes:
+      - ./lpp/code:/usr/src/app/
   worker:
     volumes:
       - ./lpp/code:/usr/src/app/
@@ -12,8 +15,14 @@ services:
   frontend:
     volumes:
       - ./frontend/code:/usr/src/app
+    command: "python index.py"
+    ports:
+      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
   mongo:
     volumes:
       - /data/lpp:/data/db
     ports:
       - "${MONGO_PORT}:${MONGO_PORT}"
+  redis:
+    ports:
+      - 6379:6379
