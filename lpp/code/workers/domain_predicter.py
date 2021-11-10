@@ -35,7 +35,8 @@ class DomainPredicter(object):
         self.error_margin = 0.2
         
         # Load train model
-        self.model = load_model("model/xgb_model.pickle")
+        self.model = xgb.XGBClassifier()
+        self.model.load_model("model/xgb_model.json")
         
         # Load model data for setting threshold
         self.model_input_data =  pd.read_pickle("model/df_post_scaling-domains_dataframe.pickle")
