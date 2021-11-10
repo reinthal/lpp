@@ -1,7 +1,6 @@
 import json
 import pandas as pd
-import dash_core_components as dcc
-import dash_table
+from dash  import dcc, dash_table
 import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np

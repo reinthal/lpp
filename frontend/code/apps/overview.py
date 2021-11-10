@@ -5,9 +5,8 @@
 
 import time, math
 import dash, requests, os
-from dash_core_components.Loading import Loading
-import dash_core_components as dcc
-import dash_html_components as html
+from dash.dcc.Loading import Loading
+from dash import dcc, html, dash_table
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -17,9 +16,6 @@ import pandas as pd
 
 from dash.dependencies import Input, Output, State
 
-import dash_core_components as dcc
-import dash_html_components as html
-import dash_table
 from dash.dependencies import Input, Output
 from dash.exceptions import PreventUpdate
 from utils.functions import make_graph, empty_graph

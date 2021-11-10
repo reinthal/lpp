@@ -6,9 +6,8 @@
 
 import requests, logging, sys
 from time import sleep
-import dash_core_components as dcc
-from dash_core_components.Location import Location
-import dash_html_components as html
+from dash import dcc, html, dash_table
+from dash.dcc.Location import Location
 
 
 from datetime import timedelta, datetime
@@ -16,13 +15,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
-import dash_table
 from dash.dependencies import Input, Output, State
 from utils.functions import empty_graph, table_parameters, summary_table_parameters, endpoints, get_api_data, verdict_symbols, api_url
 from utils.functions import get_tags, MissingColumnException, get_filter_link, get_incident_link, get_investigation_link_splunk, get_investigation_link_vt
-import dash_core_components as dcc
 import dash_bootstrap_components as dbc
-import dash_html_components as html
+
 from dash.dependencies import Input, Output
 from dash.exceptions import PreventUpdate   
 from app import app
