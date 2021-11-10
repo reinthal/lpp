@@ -37,7 +37,9 @@ VALID_ALERTS = {
     "sha": {"$exists": True},
     "sha": {"$type": "string"},
     "date": {"$exists": True},
-    "date": {"$type": "date"}
+    "date": {"$type": "date"},
+    "hosts_array": {"$exists": True},
+    "hosts_array": {"$type": "array"}
 }
 
 

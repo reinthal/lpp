@@ -101,6 +101,9 @@ async def fetch(url, headers, params, session):
     async with session.get(url, headers=headers, params=params) as response:
         return await response.json()
 
+class UninitializedAPIException(Exception):
+    pass
+
 class SnowApi(object):
 
     def __init__(self, date=None):
@@ -108,6 +111,8 @@ class SnowApi(object):
         self.user = os.getenv("SNOW_API_USER")
         self.passphrase =  os.getenv("SNOW_API_PASS")
         self.base_url = os.getenv("SNOW_API_URL")
+        if not self.base_url or not self.passphrase or not self.user:
+            raise UninitializedAPIException
         self.headers = {"Content-Type":"application/json","Accept":"application/json"}
         if date:
             try:
@@ -116,13 +121,13 @@ class SnowApi(object):
                 self.logger.error("Incorrect date format to SnowAPI. Need `%Y-%m-%d %H:%M:%S`, got {}".format(date))
                 raise e
             self.params_get_incidents_tde = {
-                "sysparm_query": f"** redacted ** {date}",
+                "sysparm_query": f"assignment_group=e64a33284f9fd3846d532e35f110c75f^contact_type=td_event^u_created_by_name=KARTE API^sys_created_on>{date}",
                 "sysparm_limit": 50,
                 "sysparm_offset": 0
             }
         else:
             self.params_get_incidents_tde = {
-                "sysparm_query": " ** redacted ** ",
+                "sysparm_query": "assignment_group=e64a33284f9fd3846d532e35f110c75f^contact_type=td_event^u_created_by_name=KARTE API",
                 "sysparm_limit": 50,
                 "sysparm_offset": 0
             }

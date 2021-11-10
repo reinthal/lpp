@@ -93,23 +93,16 @@ class DomainsDataFrame(object):
         return output_collection
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Create dataframe collection')
-    parser.add_argument("-c", "--collection", required=False)
-    args = parser.parse_args()
+def main(collection, redact=False):
     dataframe_creator = DomainsDataFrame()
     logger.info("creating data collection")
-    if args.collection:
-        collection = args.collection
-    else:
-        collection = DOMAINS_NAME
 
-
-    logger.info("Projecting data data from `{}`".format(collection))
+    logger.info("Projecting data from `{}`".format(collection))
     output_collection = dataframe_creator.create_domains_dataframe_collection(collection)
-
-    logger.info("Redacting future data data from `{}`".format(output_collection))
-    dataframe_creator.remove_future_data(output_collection)
+    
+    if redact:
+        logger.info("Redacting future data data from `{}`".format(output_collection))
+        dataframe_creator.remove_future_data(output_collection)
     
     count = dataframe_creator.setup.db[output_collection].find().count()
     logger.info("Created {output_collection}, nr docs: {nr_docs}".format(output_collection=output_collection, nr_docs=count))

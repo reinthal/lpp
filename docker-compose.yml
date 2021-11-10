@@ -72,13 +72,3 @@ services:
     working_dir: /usr/src/app/
     environment: *env
     command: gunicorn index:server -b :8050
-  em:
-    build: ./em/
-    working_dir: /build/lpp
-    command: "python module.py -C -v"
-    environment: 
-      API_URL: http://api:${API_PORT}
-      FRONTEND_URL: http://frontend:${FRONTEND_PORT}/
-      HTTPS_PROXY: ""
-      HTTP_PROXY: ""
-      NO_PROXY: ""

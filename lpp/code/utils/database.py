@@ -55,12 +55,14 @@ class SetupDatabase(object):
         
         
         self.client = MongoClient(uri)
-        logger.info(f"Testing connection to {usr}@{host}:{port}")
+        redacted_uri = f"mongodb://{usr}:*@{host}:{port}/default_db?authsource=admin"
+        logger.info(f"Testing connection to {redacted_uri}")
+        self.redacted_uri = redacted_uri
         try:
             self.client.server_info()
-            logger.info(f"Connection successful towards {usr}@{host}:{port}")
+            logger.info(f"Connection successful towards {redacted_uri}")
         except ServerSelectionTimeoutError as e:
-            logger.error(f"Connection failure when connecting to {usr}@{host}:{port}.")
+            logger.error(f"Connection failure when connecting to {redacted_uri}.")
             raise e
         db = os.getenv("MONGO_DBNAME")
         self.db = self.client[db]

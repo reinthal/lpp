@@ -37,11 +37,17 @@ def load_model(file_path):
 
 
 class CreateDataframe(object):
+    """ Creates a dataframe to be used in the DomainPredicter.
+    
+    Creates a datarame from a mongodb cursor object. Also, it uses the "collection" object to know from which
+    collection the models should be loaded from the model folder. For example if this object is initialized with
+    collection=domains_dataframe then, xgb model that ends with domains_dataframe will be loaded as well as relevant
+    svd transformation and minmax scalers.
+
+    """
 
     def __init__(self, cursor, collection, load_model=False, n_components=50) -> None:
-        logger.info(f"flattening `{collection}`")
-        df = json_normalize(cursor)
-        self.df = df
+        self.cursor = cursor
         self.load_model = load_model
         self.n_components = n_components
         self.collection = collection
@@ -153,6 +159,40 @@ class CreateDataframe(object):
         self.df.drop(columns=loose, inplace=True)
         save_model(self.df.head(1), "model/df_after_na_drop_{}.pickle".format(self.collection))
     
+    def create_realtime_tickets_columns(self):
+        logger.info("creat realtime ticket data.")
+        labels = {
+            "ticket_label": [],
+            "ticket_first_id": [],
+            "ticket_first_date": [],
+            "ticket_first_severity": []
+        }
+        def add_row(label, id, date, severity):
+            labels["ticket_label"].append(label)
+            labels["ticket_first_id"].append(id)
+            labels["ticket_first_date"].append(date)
+            labels["ticket_first_severity"].append(severity)
+
+        for ticket, alert_first_date in zip(self.df["tickets"], self.df["alert_first_date"]):
+            if not ticket:
+                add_row(0, None, None, None)
+            else:
+                latest_ticket = max(ticket[0]["tickets"], key=lambda x: x["date"])
+                # if the latest ticket was written before first real time alert 
+                # then label as not reported on in real-time
+                if latest_ticket["date"] < alert_first_date:
+                    add_row(0, None, None, None)
+                else:
+                    add_row(1, latest_ticket["id"], latest_ticket["date"], latest_ticket["severity"])
+        
+        for key in labels.keys():
+            self.df.insert(2, key, labels[key])
+        logger.info("Inserted the following ticket columns:")
+        for col in self.df.columns:
+            if "ticket" in col:
+                logger.info(col)
+        self.df.drop(columns=["tickets"],inplace=True)
+
     def create_tickets_columns(self):
         logger.info("create ticket data from array")
         tickets = self.df["tickets"]
@@ -186,6 +226,86 @@ class CreateDataframe(object):
                 logger.info(col)
         self.df.drop(columns=["tickets"],inplace=True)
 
+    def create_alerts_columns_including_last_alert(self):
+        logger.info("create alert data from array")
+
+        alerts = self.df["alerts"]
+
+        new_alert_data_first = {
+            "alert_first_sha": [],
+            "alert_first_date": [],
+        }
+
+
+        logger.info("Creating alerts columns FIRST")
+        normalized_alerts = []
+        for row in alerts:
+            
+            if row:
+                for alert in row:
+                    if isinstance(alert["date"], str) and alert["date"].isdigit():
+                        alert["date"] = datetime.fromtimestamp(int(alert["date"][:-2]))
+                    elif isinstance(alert["date"], str):
+                        try:
+                            alert["date"] = datetime.strptime(alert["date"], '%Y-%m-%dT%H:%M:%S')
+                        except ValueError:
+                            logger.warn("Could not parse alert date {} in alert. Replacing with current time.".format(alert["date"], alert["sha"]))
+                            alert["date"] = datetime.now()
+                alert = min(row, key=lambda x: x["date"])
+                normalized_row = list(map(lambda x: x["date"] - alert["date"], row))
+                normalized_alerts.append(normalized_row) 
+                new_alert_data_first["alert_first_sha"].append(alert["sha"])
+                new_alert_data_first["alert_first_date"].append(alert["date"])
+            else:
+                new_alert_data_first["alert_first_sha"].append("")
+                new_alert_data_first["alert_first_date"].append(None)
+        for key in new_alert_data_first.keys():
+            assert len(new_alert_data_first[key]) == len(self.df), "Something went wrong creating alert data"
+
+        new_alert_data_last = {
+            "alert_last_sha": [],
+            "alert_last_date": [],
+        }
+
+
+        logger.info("Creating alerts columns LAST")
+        for row in alerts:
+            
+            if row:
+                for alert in row:
+                    if isinstance(alert["date"], str) and alert["date"].isdigit():
+                        alert["date"] = datetime.fromtimestamp(int(alert["date"][:-2]))
+                    elif isinstance(alert["date"], str):
+                        try:
+                            alert["date"] = datetime.strptime(alert["date"], '%Y-%m-%dT%H:%M:%S')
+                        except ValueError:
+                            logger.warn("Could not parse alert date {} in alert. Replacing with current time.".format(alert["date"], alert["sha"]))
+                            alert["date"] = datetime.now()
+                alert = max(row, key=lambda x: x["date"])
+                new_alert_data_last["alert_last_sha"].append(alert["sha"])
+                new_alert_data_last["alert_last_date"].append(alert["date"])
+            else:
+                new_alert_data_last["alert_last_sha"].append("")
+                new_alert_data_last["alert_last_date"].append(None)
+        for key in new_alert_data_last.keys():
+            assert len(new_alert_data_last[key]) == len(self.df), "Something went wrong creating alert data"
+
+        # Add the new data to data-frame
+        for key in new_alert_data_last.keys():
+            self.df.insert(2, key, new_alert_data_last[key])
+
+        for key in new_alert_data_first.keys():
+                self.df.insert(2, key, new_alert_data_first[key])
+        logger.info("Inserting the following ticket colums")
+        for col in self.df.columns:
+            if "alert_" in col:
+                logger.info(col)
+        
+        self.df.drop(columns=["alerts"],inplace=True)
+        self.df["normalized_alerts"] = normalized_alerts
+
+
+
     def create_alerts_columns(self):
         logger.info("create alert data from array")
 
@@ -205,7 +325,11 @@ class CreateDataframe(object):
                     if isinstance(alert["date"], str) and alert["date"].isdigit():
                         alert["date"] = datetime.fromtimestamp(int(alert["date"][:-2]))
                     elif isinstance(alert["date"], str):
-                        alert["date"] = datetime.strptime(alert["date"], '%Y-%m-%dT%H:%M:%S.%f')
+                        try:
+                            alert["date"] = datetime.strptime(alert["date"], '%Y-%m-%dT%H:%M:%S')
+                        except ValueError:
+                            logger.warn("Could not parse alert date {} in alert. Replacing with current time.".format(alert["date"], alert["sha"]))
+                            alert["date"] = datetime.now()
                 alert = min(row, key=lambda x: x["date"])
                 new_alert_data["alert_first_sha"].append(alert["sha"])
                 new_alert_data["alert_first_date"].append(alert["date"])
@@ -378,7 +502,15 @@ class CreateDataframe(object):
             save_model((scaler, cols), "model/minmax_{}.pickle".format(self.collection))
         self.df[cols] = scaler.transform(self.df[cols])
     
+    def json_normalize(self):
+        collection = self.collection
+        cursor = self.cursor
+        logger.info(f"flattening `{collection}`")
+        df = json_normalize(cursor)
+        self.df = df
+
     def create_row(self):
+        self.json_normalize()
         self.keep_same_columns_as_model()
         self.make_time_objects()
         self.create_tickets_columns()
@@ -394,7 +526,14 @@ class CreateDataframe(object):
         self.scale_data()
         self.sort_data()
 
+    def create_ticket_and_alert_times(self):
+        self.json_normalize()
+        self.make_time_objects()
+        self.create_tickets_columns()
+        self.create_alerts_columns_including_last_alert()
+
     def create_dataframe(self):
+        self.json_normalize()
         self.drop_nas()
         self.make_time_objects()
         self.create_tickets_columns()
@@ -409,18 +548,13 @@ class CreateDataframe(object):
         self.calculate_endpoint_statistics()
         self.scale_data()
         self.sort_data()
-
-
-def main():
-    logger.info("Start of creating dataframe script")
-    parser = argparse.ArgumentParser(description='Create dataframe collection')
-    parser.add_argument("-c", "--collection", required=True)
-    args = parser.parse_args()
-    collection = args.collection
-    setup = SetupDatabase()
-    cursor = setup.db[collection].find()
-    logger.info(f"flattening `{collection}`")
     
-    creator = CreateDataframe(cursor, collection)
-    creator.create_dataframe()
-    creator.df.to_pickle("model/df_post_scaling-{}.pickle".format(collection))
+    def create_prediction_summary_dataframe(self):
+        self.json_normalize()
+        self.df = self.df[self.df["alerts"].notna()]
+        self.create_alerts_columns_including_last_alert()
+        self.df.drop(columns="normalized_alerts", inplace=True)
+        self.create_realtime_tickets_columns()
+        self.df["fn"] = self.df["verdict"].isin(["Benign"])  & (self.df["ticket_label"] == 1)
+        self.df["fp"] = self.df["verdict"].isin(["Malicious", "Not Sure"]) & (self.df["ticket_label"] == 0)
+        self.df = self.df.set_index("name")

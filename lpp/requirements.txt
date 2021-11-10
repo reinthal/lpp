@@ -2,7 +2,6 @@ shap
 xgboost
 numpy
 scikit-learn
-sklearn-pandas
 tqdm
 tldextract
 requests
@@ -23,7 +22,9 @@ gevent
 kombu
 joblib
 importlib-metadata
+splunk-sdk
 billiard
 starlette
 urllib3
 vine
+geoip2

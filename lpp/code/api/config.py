@@ -4,10 +4,19 @@ import numpy as np
 
 from datetime import datetime
 from pydantic import BaseModel
-from typing import Any, Optional 
+from typing import Any, List, Optional 
 from ipaddress import IPv4Address
-
+from enum import Enum
 log = logging.getLogger("uvicorn")
+
+class EndpointName(str, Enum):
+    urls = "urls"
+    communicating_files = "communicating_files"
+    downloaded_files = "downloaded_files"
+    historical_whois = "historical_whois"
+    resolutions = "resolutions"
+    siblings = "siblings"
+    domain = "domain"
 
 class AckData(BaseModel):
     level: int
@@ -29,6 +38,7 @@ class Alert(BaseModel):
     date: Optional[datetime] = None
     name: str
     customer: str
+    hosts_array: List[str]
 
 class Task(BaseModel):
     """ Celery task representation """

@@ -1,6 +1,32 @@
 import re
 
-VALID_ALERTS_REGEX = "( ** valid regex ** )).*"
+VALID_ALERTS_REGEX = "(blacklisted domain|blacklisted hostname|threatlist hostname|known C2 hostname|known Malware hostname|Typosquat domain|malicious executable download|outbound requests \(vendor malicious category, sparse single host\)).*"
+
+def project_relevant_data_incidents(output_collection):
+    return [
+        {
+            '$match': {
+                'u_json.related_alerts.alert_name': re.compile(r".*{}".format(VALID_ALERTS_REGEX))
+            }
+        },
+        {
+            '$project': {
+                'number': 1, 
+                'sys_created_on':1,
+                'u_client_id': 1, 
+                'u_json.create_user': 1, 
+                'u_json.related_alerts.log_sha1': 1, 
+                'u_json.related_alerts.alert_name': 1, 
+                'u_json.related_alerts.device': 1, 
+                'u_json.related_alerts.dst_ip': 1, 
+                'u_json.severity': 1, 
+                'u_json.reference_id': 1
+            }
+        }, 
+        {
+            '$out': output_collection
+        }
+    ]
 
 def incidents_to_tickets_pipeline(output_collection):
     """outputs relevant incidents from SNOW collection to internal tickets collection"""
@@ -20,16 +46,26 @@ def incidents_to_tickets_pipeline(output_collection):
             'date': {
                 '$toDate': '$sys_created_on'
             }, 
-            'id': '$number', 
+            'id': '$number',
+            'karte_id': "$u_json.reference_id",
             'shas': '$u_json.related_alerts.log_sha1',
-            "severity": "$u_json.severity"
+            "alert_name": "$u_json.related_alerts.alert_name",
+            "device": "$u_json.related_alerts.device",
+            "dst_ip": "$u_json.related_alerts.dst_ip",
+            "severity": "$u_json.severity",
+
         }
     }, {
         '$project': {
+            "_id": 0,
             'date': 1, 
-            'id': 1, 
+            'id': 1,
+            "karte_id": 1,
             'shas': 1,
-            "severity":1
+            "severity":1,
+            "alert_name": 1,
+            "dst_ip": 1,
+            "device": 1
         }
     }, {
         '$merge': {
@@ -103,7 +139,8 @@ def pipeline_tickets(matching_stage):
                 'date': 1, 
                 'shas': 1, 
                 'id': 1, 
-                'severity': 1
+                'severity': 1, 
+                'karte_id': 1
             }
         }, {
             '$unwind': {
@@ -190,6 +227,7 @@ def pipeline_tickets(matching_stage):
                 'tickets': {
                     '$addToSet': {
                         'id': '$id', 
+                        'karte_id': '$karte_id', 
                         'date': '$date', 
                         'severity': '$severity', 
                         'shas': '$shas'
@@ -203,7 +241,7 @@ def pipeline_tickets(matching_stage):
                 '_id': 0
             }
         }, {
-            '$out': "tickets_aggregation"
+            '$out': 'tickets_aggregation'
         }
     ]
     pipeline_tickets.insert(0, {"$match": matching_stage})
