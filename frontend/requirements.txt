@@ -1,7 +1,5 @@
-pymongo
-streamlit
 matplotlib
-seaborn
+pandas
 plotly
 requests
 ipywidgets
@@ -12,3 +10,7 @@ llvmlite
 shap
 geoip2
 pycountry
+dash>1.12.0
+dash-bootstrap-components
+dash-daq
+gunicorn

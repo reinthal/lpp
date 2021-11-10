@@ -1,9 +1,132 @@
+import json
 import pandas as pd
+import dash_core_components as dcc
+import dash_table
 import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
+import requests, os
+from dash.exceptions import PreventUpdate
+import urllib
+
+api_url = os.getenv("API_URL")
+
+verdict_symbols = {
+    "Benign": "✅",
+    "Not Sure": "❓",
+    "Malicious": "😎"
+}
 
 sky_colors =  ['rgb(253, 156, 140)', 'rgb(118, 91, 140)', 'rgb(205, 193, 229)']
+endpoints = ["urls", "communicating_files", "downloaded_files", "historical_whois", "resolutions", "siblings"]
+
+summary_table_parameters = dict(
+        style_data={'whiteSpace': 'normal', 'height': 'auto', 'lineHeight': '15px'},
+        style_cell={'textAlign': 'left'},
+        style_data_conditional=[
+            {
+                'if': {'row_index': 'odd'},
+                'backgroundColor': 'rgb(248, 248, 248)'
+            },
+        ],
+        style_header={
+            'backgroundColor': 'rgb(230, 230, 230)',
+            'fontWeight': 'bold'
+        },
+)
+
+table_parameters = dict(filter_action="native",
+        sort_action="native",
+        sort_mode="multi",
+        page_action="native",
+        page_current= 0,
+        page_size= 15,
+        style_data={'whiteSpace': 'normal', 'height': 'auto', 'lineHeight': '15px'},
+        style_data_conditional=[
+            {
+                'if': {'row_index': 'odd'},
+                'backgroundColor': 'rgb(248, 248, 248)'
+            },
+        ],
+        style_header={
+            'backgroundColor': 'rgb(230, 230, 230)',
+            'fontWeight': 'bold'
+        },
+)
+
+class MissingColumnException(Exception):
+    pass
+def get_investigation_link_vt(dst):
+    return f"https://www.virustotal.com/gui/domain/{dst}/detection"
+
+def get_investigation_link_splunk(customer, dst):
+    return f"https://global-sh01.gss01.nttsecurity.net:8000/en-US/app/search/search?q=search+`{customer}`+{dst}+&earliest=-7d@h&latest=now&display.page.search.mode=verbose"
+    
+
+def get_incident_link():
+    return "https://karte.gss01.nttsecurity.net/ticket-new"
+
+def get_filter_link(customers, dst):
+    if len(customers) > 1:
+        customer_regex = "(" + "|".join(customers) + ")"
+    else:
+        customer_regex = customers[0]
+    url =  f"http://filter.gcs.gmssp.io/admin/filterconf/filter/add/?criterium-key-0=customer&criterium-value-0={customer_regex}&criterium-key-1=dst&criterium-value-1={dst}"
+    return url
+
+def get_tags(data):
+    df = pd.DataFrame(data)
+    if "tags" not in df.columns:
+        raise MissingColumnException
+    else:
+        return list(df.tags.apply(pd.Series).stack().reset_index(drop=True).unique())
+
+def get_api_data(endpoint, search) -> tuple:
+    """fetches data from the api and formats into return values"""
+    if search:
+        domain = search.split("=")[-1]
+        url = api_url + f"/{endpoint}/" + domain
+        resp = requests.get(url)
+        if resp.status_code == 200:
+            data = resp.json()
+            if type(data) == str: 
+                data = json.loads(data)
+            df = pd.DataFrame(data=data)
+            if not df.empty:
+                return df.to_dict("records"), [dict(name=col, id=col) for col in df.columns if col != "tags"]
+    raise PreventUpdate(msg=f"Callback error for {endpoint}. Did you enter a correct domain name?")
+
+def empty_graph(message="No Matching data found"):
+    empty_graph =  {
+        "layout": {
+            "xaxis": {
+                "visible": False
+            },
+            "yaxis": {
+                "visible": False
+            },
+            "annotations": [
+                {
+                    "text": message,
+                    "xref": "paper",
+                    "yref": "paper",
+                    "showarrow": False,
+                    "font": {
+                        "size": 28
+                    }
+                }
+            ]
+        }
+    }
+    return empty_graph
+
+def make_graph(id):
+    graph_component = dcc.Loading(
+        id=f"loading-{id}",
+        type="default",
+        children=dcc.Graph(id=id, figure=empty_graph)
+    )
+    return graph_component
 
 verdict_symbols = {
     "Benign": "✅",
@@ -78,54 +201,6 @@ def get_explainer_fig(x_input, shap_values):
     fig.update_yaxes(title_text="Contribution By Category")
     return fig
 
-
-def format_historical_whois(data):
-    d = []
-    for entry in data:
-        attributes = entry["attributes"] 
-        temp =  {
-            "registrar": attributes["registrar_name"],
-            "first_seen_date": pd.Timestamp(attributes["first_seen_date"], unit='s').floor('D'),
-            "last_updated": pd.Timestamp(attributes["last_updated"], unit='s').floor('D'),
-            "Creation Date": attributes["whois_map"]["Creation Date"],
-            "Registry Expiry Date": attributes["whois_map"]["Registry Expiry Date"],
-            "Updated Date": attributes["whois_map"]["Updated Date"],
-        }
-
-        d.append(temp)
-    return pd.DataFrame(d)
-
-
-def make_freshness_gauge(number, reference, title):
-    
-    fig = go.Figure(go.Indicator(
-        mode = "number+delta",
-        value = number,
-        delta = {"reference": reference},
-        title = {'text': f"{title}"},
-    ))
-    fig.update_layout(
-        autosize=False,
-        width=500,
-        height=500
-    )
-    return fig
-
-def get_domains(d):
-    labels = ['Malicious','harmless','undetected']
-    values = [
-        int(d["domain.data.attributes.last_analysis_stats.malicious"]), 
-        int(d["domain.data.attributes.last_analysis_stats.undetected"]),
-        int(d["domain.data.attributes.last_analysis_stats.harmless"])
-    ]
-    sky_colors =  ['rgb(253, 156, 140)', 'rgb(118, 91, 140)', 'rgb(205, 193, 229)']
-    fig = go.Figure(data=[go.Pie(labels=labels, 
-                                values=values, 
-                                marker_colors=sky_colors,
-                                pull=[0.2, 0, 0])])
-    fig.update_traces(textposition='inside', textinfo='percent+label')
-    return fig
-
 def get_urls_figure(data):
     nr_samples = 20
     data = data.sort_values(by=['last_analysis_date', 'malicious'], ascending=False).head(nr_samples)
@@ -146,49 +221,6 @@ def make_pie(malicious, undetected, harmless, title):
     pie = go.Pie(labels=labels, values=values, marker_colors=sky_colors, pull=[0.2, 0, 0], name=title)
     return pie
 
-def format_siblings_entries(data):
-    """Formats a url entry into a data row"""
-    d = []
-    for entry in data:
-        attributes = entry["attributes"] 
-        temp =  {
-            "registrar": attributes["registrar"],
-            "last_modification_date": pd.Timestamp(attributes["last_modification_date"], unit='s').floor('D'),
-            "last_update_date": pd.Timestamp(attributes["last_update_date"], unit='s').floor('D'),
-            "harmless": attributes["last_analysis_stats"]["harmless"],
-            "malicious": attributes["last_analysis_stats"]["malicious"],
-            "undetected": attributes["last_analysis_stats"]["undetected"],
-            "whois": attributes["whois"]
-        }
-        
-        
-        try:
-            temp["tags"] = " ".join(attributes["tags"])
-        except KeyError:
-            temp["tags"] = ""
-        
-        categories = []
-        for key in attributes["categories"].keys():
-            categories.append(attributes["categories"][key])
-        temp["categories"] = " ".join(categories)
-        d.append(temp)
-    df = pd.DataFrame(d)
-    return df
-
-def format_resolutions_entries(data):
-    """Formats a url entry into a data row"""
-    d = []
-    for entry in data:
-        attributes = entry["attributes"]
-        temp =  {
-            "date": pd.Timestamp(attributes["date"], unit='s'),
-            "host": attributes["host_name"],
-            "ip": attributes["ip_address"],
-            "resolver": attributes["resolver"]
-        }
-        d.append(temp)
-    df = pd.DataFrame(d)
-    return df
 
 def get_com_files_figure(data):
     data = data.sort_values(by=["last_analysis_date", "malicious"], ascending=False).head(10)
@@ -206,56 +238,3 @@ def get_com_files_figure(data):
     )
     fig.update_yaxes(title="Votes")
     return fig
-
-def format_communicating_files_entries(data):
-    """Formats a url entry into a data row"""
-    d = []
-    for entry in data:
-        attributes = entry["attributes"]
-        temp =  {
-            "tags": " ".join(attributes["tags"]),
-            "last_analysis_date": pd.Timestamp(attributes["last_analysis_date"], unit='s').floor('D'),
-            "harmless": attributes["last_analysis_stats"]["harmless"],
-            "malicious": attributes["last_analysis_stats"]["malicious"],
-            "undetected": attributes["last_analysis_stats"]["undetected"],
-            "sha": attributes["sha256"],
-            "magic": attributes["magic"] 
-        }
-        d.append(temp)
-    df = pd.DataFrame(d)
-    return df
-
-def format_downloaded_files_entries(data):
-    """Formats a url entry into a data row"""
-    d = []
-    for entry in data:
-        attributes = entry["attributes"]
-        temp =  {
-            "tags": " ".join(attributes["tags"]),
-            "last_analysis_date": pd.Timestamp(attributes["last_analysis_date"], unit='s').floor('D'),
-            "harmless": attributes["last_analysis_stats"]["harmless"],
-            "malicious": attributes["last_analysis_stats"]["malicious"],
-            "undetected": attributes["last_analysis_stats"]["undetected"],
-            "reputation": attributes["reputation"],
-            "sha": attributes["sha256"]
-        }
-        d.append(temp)
-    df = pd.DataFrame(d)
-    return df
-
-def format_url_entries(data):
-    """Formats a url entry into a data row"""
-    d = []
-    for entry in data:
-        attributes = entry["attributes"]
-        temp =  {
-            "tags": " ".join(attributes["tags"]),
-            "last_analysis_date": pd.Timestamp(attributes["last_analysis_date"], unit='s').floor('D'),
-            "harmless": attributes["last_analysis_stats"]["harmless"],
-            "malicious": attributes["last_analysis_stats"]["malicious"],
-            "undetected": attributes["last_analysis_stats"]["undetected"],
-            "url": attributes["url"]
-        }
-        d.append(temp)
-    df = pd.DataFrame(d)
-    return df
